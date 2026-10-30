@@ -7,7 +7,7 @@
         // 페이지가 열리자마자 깃허브에 업로드된 실제 마스터 CSV 파일을 자동으로 불러옵니다.
         window.addEventListener('DOMContentLoaded', function() {
             // 본인의 깃허브 주소에 맞춰 경로 설정 (같은 저장소에 있는 경우 파일명만 적어도 됩니다)
-            const csvUrl = 'apartment_options_master_db.csv'; 
+            const csvUrl = 'https://raw.githubusercontent.com/streetcow/dl-realestate-v1/main/apartment_options_master_db.csv';
 
             Papa.parse(csvUrl, {
                 download: true,
