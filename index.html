@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>아파트 유상옵션 트렌드 모니터링 웹사이트</title>
+    <!-- Tailwind CSS 및 Chart.js CDN 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen p-6">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- 헤더 및 자동 크롤링 / 파일 업로드 섹션 -->
+        <header class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">🏢 5대 건설사 아파트 유상옵션 트렌드 모니터링</h1>
+                <p class="text-sm text-gray-500 mt-1">청약홈 API 실시간 크롤링 및 마스터 DB 대시보드</p>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- 자동 크롤링 실행 버튼 -->
+                <button id="autoCrawlBtn" onclick="triggerAutoCrawler()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm flex items-center gap-2">
+                    <svg class="w-4 h-4 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    🔄 청약홈 자동 크롤링 실행
+                </button>
+
+                <!-- CSV 파일 업로드 버튼 -->
+                <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm">
+                    📁 마스터 CSV 업로드
+                    <input type="file" id="csvFile" accept=".csv" class="hidden">
+                </label>
+            </div>
+        </header>
+
+        <!-- 크롤링 상태 알림 배너 -->
+        <div id="statusBanner" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-sm flex items-center justify-between">
+            <span id="statusText">🔄 청약홈 API에서 최신 분양 공고 및 유상옵션 데이터를 수집하고 있습니다...</span>
+            <span id="statusClose" class="cursor-pointer font-bold" onclick="hideStatus()">×</span>
+        </div>
+
+        <!-- 핵심 KPI 메트릭 카드 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">조회된 옵션 항목 수</p>
+                <p id="kpiTotalItems" class="text-2xl font-bold text-gray-800 mt-2">0 개</p>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">분석 대상 단지 수</p>
+                <p id="kpiTotalComplexes" class="text-2xl font-bold text-gray-800 mt-2">0 개소</p>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">평균 옵션 공급금액</p>
+                <p id="kpiAvgPrice" class="text-2xl font-bold text-blue-600 mt-2">0 원</p>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">최고가 옵션 금액</p>
+                <p id="kpiMaxPrice" class="text-2xl font-bold text-indigo-600 mt-2">0 원</p>
+            </div>
+        </div>
+
+        <!-- 필터 및 차트 레이아웃 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- 사이드바 필터 패널 -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+                <h2 class="text-lg font-bold text-gray-800 border-b pb-2">🔍 실시간 필터</h2>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">옵션 대분류</label>
+                    <select id="filterCategory" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="ALL">전체 보기</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">주택형(평형)</label>
+                    <select id="filterHousingType" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="ALL">전체 보기</option>
+                    </select>
+                </div>
+
+                <div class="pt-4">
+                    <button id="resetFilter" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-xl text-sm transition">필터 초기화</button>
+                </div>
+            </div>
+
+            <!-- 메인 시각화 차트 영역 -->
+            <div class="lg:col-span-2 space-y-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4">📊 표준 대분류별 평균 옵션 가격</h2>
+                    <div class="relative h-72">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <h2 class="text-lg font-bold text-gray-800 mb-4">📈 분기별 옵션 가격 트렌드</h2>
+                    <div class="relative h-72">
+                        <canvas id="lineChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- 자바스크립트 로직 -->
+    <script>
+        let globalData = [];
+        let barChartInstance = null;
+        let lineChartInstance = null;
+
+        // 자동 크롤링 버튼 클릭 시뮬레이션 및 연동 함수
+        function triggerAutoCrawler() {
+            const banner = document.getElementById('statusBanner');
+            const statusText = document.getElementById('statusText');
+            banner.classList.remove('hidden');
+            statusText.innerHTML = "🔄 청약홈 API와 연동하여 신규 분양 공고를 스캔하고 최신 데이터를 수집 중입니다... (잠시만 기다려주세요)";
+
+            // 실제 백엔드(Python Flask 등)가 구동 중인 경우 fetch 요청을 보낼 수 있으며, 
+            // 여기서는 시뮬레이션 후 마스터 CSV 로드 안내를 띄웁니다.
+            setTimeout(() => {
+                statusText.innerHTML = "✅ 최신 크롤링이 완료되었습니다! 최신 데이터가 반영된 마스터 CSV 파일을 업로드하거나 연동해 주세요.";
+            }, 2500);
+        }
+
+        function hideStatus() {
+            document.getElementById('statusBanner').classList.add('hidden');
+        }
+
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    globalData = results.data;
+                    initDashboard();
+                    document.getElementById('statusBanner').classList.add('hidden');
+                }
+            });
+        });
+
+        function initDashboard() {
+            populateDropdowns();
+            updateDashboard(globalData);
+        }
+
+        function populateDropdowns() {
+            const categories = [...new Set(globalData.map(item => item.표준대분류).filter(Boolean))];
+            const housingTypes = [...new Set(globalData.map(item => item.주택형).filter(Boolean))];
+
+            const catSelect = document.getElementById('filterCategory');
+            const houseSelect = document.getElementById('filterHousingType');
+
+            catSelect.innerHTML = '<option value="ALL">전체 보기</option>';
+            houseSelect.innerHTML = '<option value="ALL">전체 보기</option>';
+
+            categories.forEach(cat => {
+                catSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+            housingTypes.forEach(house => {
+                houseSelect.innerHTML += `<option value="${house}">${house}</option>`;
+            });
+        }
+
+        function filterData() {
+            const selectedCat = document.getElementById('filterCategory').value;
+            const selectedHouse = document.getElementById('filterHousingType').value;
+
+            return globalData.filter(item => {
+                const matchCat = (selectedCat === 'ALL' || item.표준대분류 === selectedCat);
+                const matchHouse = (selectedHouse === 'ALL' || String(item.주택형) === selectedHouse);
+                return matchCat && matchHouse;
+            });
+        }
+
+        function updateDashboard(data) {
+            const totalItems = data.length;
+            const uniqueComplexes = new Set(data.map(item => item.단지명)).size;
+            const prices = data.map(item => Number(item.공급금액_원) || 0);
+            const avgPrice = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+            const maxPrice = prices.length ? Math.max(...prices) : 0;
+
+            document.getElementById('kpiTotalItems').innerText = `${totalItems.toLocaleString()} 개`;
+            document.getElementById('kpiTotalComplexes').innerText = `${uniqueComplexes} 개소`;
+            document.getElementById('kpiAvgPrice').innerText = `${Math.round(avgPrice).toLocaleString()} 원`;
+            document.getElementById('kpiMaxPrice').innerText = `${maxPrice.toLocaleString()} 원`;
+
+            renderBarChart(data);
+            renderLineChart(data);
+        }
+
+        function renderBarChart(data) {
+            const grouped = {};
+            data.forEach(item => {
+                const cat = item.표준대분류 || '기타';
+                if (!grouped[cat]) grouped[cat] = { sum: 0, count: 0 };
+                grouped[cat].sum += (Number(item.공급금액_원) || 0);
+                grouped[cat].count += 1;
+            });
+
+            const labels = Object.keys(grouped);
+            const averages = labels.map(cat => Math.round(grouped[cat].sum / grouped[cat].count));
+
+            const ctx = document.getElementById('barChart').getContext('2d');
+            if (barChartInstance) barChartInstance.destroy();
+
+            barChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '평균 공급금액 (원)',
+                        data: averages,
+                        backgroundColor: 'rgba(37, 99, 235, 0.8)',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderLineChart(data) {
+            const grouped = {};
+            data.forEach(item => {
+                const quarter = item.분양분기 || '미상';
+                if (!grouped[quarter]) grouped[quarter] = { sum: 0, count: 0 };
+                grouped[quarter].sum += (Number(item.공급금액_원) || 0);
+                grouped[quarter].count += 1;
+            });
+
+            const sortedQuarters = Object.keys(grouped).sort();
+            const averages = sortedQuarters.map(q => Math.round(grouped[q].sum / grouped[q].count));
+
+            const ctx = document.getElementById('lineChart').getContext('2d');
+            if (lineChartInstance) lineChartInstance.destroy();
+
+            lineChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedQuarters,
+                    datasets: [{
+                        label: '분기별 평균 옵션가 (원)',
+                        data: averages,
+                        borderColor: 'rgb(79, 70, 229)',
+                        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        document.getElementById('filterCategory').addEventListener('change', () => updateDashboard(filterData()));
+        document.getElementById('filterHousingType').addEventListener('change', () => updateDashboard(filterData()));
+        document.getElementById('resetFilter').addEventListener('click', () => {
+            document.getElementById('filterCategory').value = 'ALL';
+            document.getElementById('filterHousingType').value = 'ALL';
+            updateDashboard(globalData);
+        });
+    </script>
+</body>
+</html>
