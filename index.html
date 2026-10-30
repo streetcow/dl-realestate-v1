@@ -19,7 +19,6 @@
                 <p class="text-sm text-gray-500 mt-1">청약홈 실제 분양 공고 및 유상옵션 데이터 실시간 분석 대시보드</p>
             </div>
             <div>
-                <!-- 수동 백업용 파일 업로드 버튼 -->
                 <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-medium text-sm transition shadow-sm inline-block">
                     📁 CSV 파일 수동 업로드
                     <input type="file" id="csvFile" accept=".csv" class="hidden">
@@ -50,10 +49,24 @@
         <!-- 필터 및 차트 레이아웃 -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <!-- 사이드바 필터 패널 -->
+            <!-- 사이드바 필터 패널 (건설사 및 지역 선택 추가) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-                <h2 class="text-lg font-bold text-gray-800 border-b pb-2">🔍 실시간 필터</h2>
+                <h2 class="text-lg font-bold text-gray-800 border-b pb-2">🔍 상세 맞춤 필터</h2>
                 
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">시공사(건설사)</label>
+                    <select id="filterBuilder" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="ALL">전체 건설사 보기</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">지역 (구/시)</label>
+                    <select id="filterRegion" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="ALL">전체 지역 보기</option>
+                    </select>
+                </div>
+
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">옵션 대분류</label>
                     <select id="filterCategory" class="w-full border border-gray-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -94,16 +107,15 @@
 
     </div>
 
-    <!-- 자바스크립트 로직 -->
+    <!-- 자바스크립트 로직 (건설사/지역 필터 포함) -->
     <script>
         let globalData = [];
         let barChartInstance = null;
         let lineChartInstance = null;
 
-        // 페이지 접속 시 깃허브에 있는 실제 CSV 파일 자동 로드
+        // 페이지 접속 시 깃허브 Raw 마스터 CSV 파일 자동 로드
         window.addEventListener('DOMContentLoaded', function() {
-            const csvUrl = 'https://raw.githubusercontent.com/streetcow/dl-realestate-v1/main/apartment_options_master_db.csv';
-
+            const csvUrl = 'https://raw.githubusercontent.com/streetcow/dl-realestate-v1/main/apartment_options_master_db.csv'; 
 
             Papa.parse(csvUrl, {
                 download: true,
@@ -115,12 +127,11 @@
                     initDashboard();
                 },
                 error: function(err) {
-                    console.log("자동 로드 대기 중 (수동 업로드 파일을 기다립니다):", err);
+                    console.log("자동 로드 대기 중:", err);
                 }
             });
         });
 
-        // 수동 파일 업로드 처리
         document.getElementById('csvFile').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -142,31 +153,40 @@
         }
 
         function populateDropdowns() {
+            const builders = [...new Set(globalData.map(item => item['5대건설사(표준)'] || item.원본시공사명).filter(Boolean))];
+            const regions = [...new Set(globalData.map(item => item['세부지역(구/시)']).filter(Boolean))];
             const categories = [...new Set(globalData.map(item => item.표준대분류).filter(Boolean))];
             const housingTypes = [...new Set(globalData.map(item => item.주택형).filter(Boolean))];
 
+            const builderSelect = document.getElementById('filterBuilder');
+            const regionSelect = document.getElementById('filterRegion');
             const catSelect = document.getElementById('filterCategory');
             const houseSelect = document.getElementById('filterHousingType');
 
+            builderSelect.innerHTML = '<option value="ALL">전체 건설사 보기</option>';
+            regionSelect.innerHTML = '<option value="ALL">전체 지역 보기</option>';
             catSelect.innerHTML = '<option value="ALL">전체 보기</option>';
             houseSelect.innerHTML = '<option value="ALL">전체 보기</option>';
 
-            categories.forEach(cat => {
-                catSelect.innerHTML += `<option value="${cat}">${cat}</option>`;
-            });
-            housingTypes.forEach(house => {
-                houseSelect.innerHTML += `<option value="${house}">${house}</option>`;
-            });
+            builders.forEach(b => builderSelect.innerHTML += `<option value="${b}">${b}</option>`);
+            regions.forEach(r => regionSelect.innerHTML += `<option value="${r}">${r}</option>`);
+            categories.forEach(cat => catSelect.innerHTML += `<option value="${cat}">${cat}</option>`);
+            housingTypes.forEach(house => houseSelect.innerHTML += `<option value="${house}">${house}</option>`);
         }
 
         function filterData() {
+            const selectedBuilder = document.getElementById('filterBuilder').value;
+            const selectedRegion = document.getElementById('filterRegion').value;
             const selectedCat = document.getElementById('filterCategory').value;
             const selectedHouse = document.getElementById('filterHousingType').value;
 
             return globalData.filter(item => {
+                const builderVal = item['5대건설사(표준)'] || item.원본시공사명;
+                const matchBuilder = (selectedBuilder === 'ALL' || builderVal === selectedBuilder);
+                const matchRegion = (selectedRegion === 'ALL' || item['세부지역(구/시)'] === selectedRegion);
                 const matchCat = (selectedCat === 'ALL' || item.표준대분류 === selectedCat);
                 const matchHouse = (selectedHouse === 'ALL' || String(item.주택형) === selectedHouse);
-                return matchCat && matchHouse;
+                return matchBuilder && matchRegion && matchCat && matchHouse;
             });
         }
 
@@ -255,9 +275,13 @@
             });
         }
 
+        document.getElementById('filterBuilder').addEventListener('change', () => updateDashboard(filterData()));
+        document.getElementById('filterRegion').addEventListener('change', () => updateDashboard(filterData()));
         document.getElementById('filterCategory').addEventListener('change', () => updateDashboard(filterData()));
         document.getElementById('filterHousingType').addEventListener('change', () => updateDashboard(filterData()));
         document.getElementById('resetFilter').addEventListener('click', () => {
+            document.getElementById('filterBuilder').value = 'ALL';
+            document.getElementById('filterRegion').value = 'ALL';
             document.getElementById('filterCategory').value = 'ALL';
             document.getElementById('filterHousingType').value = 'ALL';
             updateDashboard(globalData);
